@@ -155,7 +155,7 @@ func TestGetData(t *testing.T) {
 	for _, tt := range tests {
 		target := fmt.Sprintf("%+v", tt)
 
-		hook := FirehoseHook{: }
+		hook := FirehoseHook{formatter: &logrus.JSONFormatter{}}
 		entry := &logrus.Entry{
 			Message: defaultMessage,
 			Data:    tt.data,

@@ -1,9 +1,6 @@
 package logrus_firehose
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/firehose"
@@ -31,6 +28,7 @@ type FirehoseHook struct {
 	ignoreFields        map[string]struct{}
 	filters             map[string]func(interface{}) interface{}
 	addNewline          bool
+	formatter           logrus.Formatter
 }
 
 // New returns initialized logrus hook for Firehose with persistent Firehose logger.
@@ -129,21 +127,7 @@ func (h *FirehoseHook) getStreamName(entry *logrus.Entry) string {
 }
 
 func (h *FirehoseHook) getData(entry *logrus.Entry) []byte {
-	data := make(logrus.Fields)
-	entry.Data["message"] = entry.Message
-	for k, v := range entry.Data {
-		if _, ok := h.ignoreFields[k]; ok {
-			continue
-		}
-		if fn, ok := h.filters[k]; ok {
-			v = fn(v) // apply custom filter
-		} else {
-			v = formatData(v) // use default formatter
-		}
-		data[k] = v
-	}
-
-	bytes, err := json.Marshal(data)
+	bytes, err := h.formatter.Format(entry)
 	if err != nil {
 		return nil
 	}
@@ -154,16 +138,3 @@ func (h *FirehoseHook) getData(entry *logrus.Entry) []byte {
 	return bytes
 }
 
-// formatData returns value as a suitable format.
-func formatData(value interface{}) (formatted interface{}) {
-	switch value := value.(type) {
-	case json.Marshaler:
-		return value
-	case error:
-		return value.Error()
-	case fmt.Stringer:
-		return value.String()
-	default:
-		return value
-	}
-}
