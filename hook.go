@@ -1,6 +1,9 @@
 package logrus_firehose
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/firehose"
@@ -25,8 +28,9 @@ type FirehoseHook struct {
 	defaultPartitionKey string
 	async               bool
 	levels              []logrus.Level
+	ignoreFields        map[string]struct{}
+	filters             map[string]func(interface{}) interface{}
 	addNewline          bool
-	formatter           logrus.Formatter
 }
 
 // New returns initialized logrus hook for Firehose with persistent Firehose logger.
@@ -41,7 +45,8 @@ func New(name string, conf Config) (*FirehoseHook, error) {
 		client:            svc,
 		defaultStreamName: name,
 		levels:            defaultLevels,
-		formatter:         &logrus.JSONFormatter{},
+		ignoreFields:      make(map[string]struct{}),
+		filters:           make(map[string]func(interface{}) interface{}),
 	}, nil
 }
 
@@ -57,7 +62,8 @@ func NewWithAWSConfig(name string, conf *aws.Config) (*FirehoseHook, error) {
 		client:            svc,
 		defaultStreamName: name,
 		levels:            defaultLevels,
-		formatter:         &logrus.JSONFormatter{},
+		ignoreFields:      make(map[string]struct{}),
+		filters:           make(map[string]func(interface{}) interface{}),
 	}, nil
 }
 
@@ -77,13 +83,19 @@ func (h *FirehoseHook) Async() {
 	h.async = true
 }
 
+// AddIgnore adds field name to ignore.
+func (h *FirehoseHook) AddIgnore(name string) {
+	h.ignoreFields[name] = struct{}{}
+}
+
+// AddFilter adds a custom filter function.
+func (h *FirehoseHook) AddFilter(name string, fn func(interface{}) interface{}) {
+	h.filters[name] = fn
+}
+
 // AddNewline sets if a newline is added to each message.
 func (h *FirehoseHook) AddNewLine(b bool) {
 	h.addNewline = b
-}
-
-func (h *FirehoseHook) WithFormatter(f logrus.Formatter) {
-	h.formatter = f
 }
 
 // Fire is invoked by logrus and sends log to Firehose.
@@ -100,7 +112,7 @@ func (h *FirehoseHook) Fire(entry *logrus.Entry) error {
 // Fire is invoked by logrus and sends log to Firehose.
 func (h *FirehoseHook) fire(entry *logrus.Entry) error {
 	in := &firehose.PutRecordInput{
-		DeliveryStreamName: stringPtr(h.getStreamName(entry)),
+		DeliveryStreamName: aws.String(h.getStreamName(entry)),
 		Record: &firehose.Record{
 			Data: h.getData(entry),
 		},
@@ -117,16 +129,41 @@ func (h *FirehoseHook) getStreamName(entry *logrus.Entry) string {
 }
 
 func (h *FirehoseHook) getData(entry *logrus.Entry) []byte {
-	bytes, err := h.formatter.Format(entry)
+	data := make(logrus.Fields)
+	entry.Data["message"] = entry.Message
+	for k, v := range entry.Data {
+		if _, ok := h.ignoreFields[k]; ok {
+			continue
+		}
+		if fn, ok := h.filters[k]; ok {
+			v = fn(v) // apply custom filter
+		} else {
+			v = formatData(v) // use default formatter
+		}
+		data[k] = v
+	}
+
+	bytes, err := json.Marshal(data)
 	if err != nil {
 		return nil
 	}
 	if h.addNewline {
-		bytes = append(bytes, []byte("\n")...)
+		n := []byte("\n")
+		bytes = append(bytes, n...)
 	}
 	return bytes
 }
 
-func stringPtr(str string) *string {
-	return &str
+// formatData returns value as a suitable format.
+func formatData(value interface{}) (formatted interface{}) {
+	switch value := value.(type) {
+	case json.Marshaler:
+		return value
+	case error:
+		return value.Error()
+	case fmt.Stringer:
+		return value.String()
+	default:
+		return value
+	}
 }

@@ -133,62 +133,34 @@ func TestGetData(t *testing.T) {
 			map[string]interface{}{"message": "field_message"},
 			`{"message":"field_message"}`,
 		},
-		{
-			map[string]interface{}{
-				"name":  "apple",
-				"price": 105,
-				"color": "red",
-			},
-			`{"color":"red","message":"entry_message","name":"apple","price":105}`,
-		},
-		{
-			map[string]interface{}{
-				"name":    "apple",
-				"price":   105,
-				"color":   "red",
-				"message": "field_message",
-			},
-			`{"color":"red","message":"field_message","name":"apple","price":105}`,
-		},
+		//{
+		//	map[string]interface{}{
+		//		"name":  "apple",
+		//		"price": 105,
+		//		"color": "red",
+		//	},
+		//	`{"color":"red","message":"entry_message","name":"apple","price":105}`,
+		//},
+		//{
+		//	map[string]interface{}{
+		//		"name":    "apple",
+		//		"price":   105,
+		//		"color":   "red",
+		//		"message": "field_message",
+		//	},
+		//	`{"color":"red","message":"field_message","name":"apple","price":105}`,
+		//},
 	}
 
 	for _, tt := range tests {
 		target := fmt.Sprintf("%+v", tt)
 
-		hook := FirehoseHook{}
+		hook := FirehoseHook{: }
 		entry := &logrus.Entry{
 			Message: defaultMessage,
 			Data:    tt.data,
 		}
 
 		assert.Equal(tt.expected, string(hook.getData(entry)), target)
-	}
-}
-
-type myStringer struct{}
-
-func (myStringer) String() string { return "myStringer!" }
-
-type notStringer struct{}
-
-func (notStringer) String() {}
-
-func TestStringPtr(t *testing.T) {
-	assert := assert.New(t)
-
-	tests := []struct {
-		value string
-	}{
-		{"abc"},
-		{""},
-		{"991029102910291029478748"},
-		{"skjdklsajdlewrjo4iuoivjcklxmc,.mklrjtlkrejijoijpoijvpodjfr"},
-	}
-
-	for _, tt := range tests {
-		target := fmt.Sprintf("%+v", tt)
-
-		p := stringPtr(tt.value)
-		assert.Equal(tt.value, *p, target)
 	}
 }
