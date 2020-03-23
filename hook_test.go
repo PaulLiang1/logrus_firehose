@@ -1,10 +1,8 @@
 package logrus_firehose
 
 import (
-	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -78,46 +76,6 @@ func TestSetLevels(t *testing.T) {
 
 		hook.SetLevels(nil)
 		assert.Nil(hook.levels, target)
-	}
-}
-
-func TestAddIgnore(t *testing.T) {
-	assert := assert.New(t)
-
-	hook := FirehoseHook{
-		ignoreFields: make(map[string]struct{}),
-	}
-
-	list := []string{"foo", "bar", "baz"}
-	for i, key := range list {
-		assert.Len(hook.ignoreFields, i)
-
-		hook.AddIgnore(key)
-		assert.Len(hook.ignoreFields, i+1)
-
-		for j := 0; j <= i; j++ {
-			assert.Contains(hook.ignoreFields, list[j])
-		}
-	}
-}
-
-func TestAddFilter(t *testing.T) {
-	assert := assert.New(t)
-
-	hook := FirehoseHook{
-		filters: make(map[string]func(interface{}) interface{}),
-	}
-
-	list := []string{"foo", "bar", "baz"}
-	for i, key := range list {
-		assert.Len(hook.filters, i)
-
-		hook.AddFilter(key, nil)
-		assert.Len(hook.filters, i+1)
-
-		for j := 0; j <= i; j++ {
-			assert.Contains(hook.filters, list[j])
-		}
 	}
 }
 
@@ -207,40 +165,6 @@ func TestGetData(t *testing.T) {
 	}
 }
 
-func TestFormatData(t *testing.T) {
-	assert := assert.New(t)
-
-	// assertion types
-	var (
-		assertTypeInt    int
-		assertTypeString string
-		assertTypeTime   time.Time
-	)
-
-	tests := []struct {
-		name         string
-		value        interface{}
-		expectedType interface{}
-	}{
-		{"int", 13, assertTypeInt},
-		{"string", "foo", assertTypeString},
-		{"error", errors.New("this is a test error"), assertTypeString},
-		{"time_stamp", time.Now(), assertTypeTime},        // implements JSON marshaler
-		{"time_duration", time.Hour, assertTypeString},    // implements .String()
-		{"stringer", myStringer{}, assertTypeString},      // implements .String()
-		{"stringer_ptr", &myStringer{}, assertTypeString}, // implements .String()
-		{"not_stringer", notStringer{}, notStringer{}},
-		{"not_stringer_ptr", &notStringer{}, &notStringer{}},
-	}
-
-	for _, tt := range tests {
-		target := fmt.Sprintf("%+v", tt)
-
-		result := formatData(tt.value)
-		assert.IsType(tt.expectedType, result, target)
-	}
-}
-
 type myStringer struct{}
 
 func (myStringer) String() string { return "myStringer!" }
@@ -268,30 +192,3 @@ func TestStringPtr(t *testing.T) {
 		assert.Equal(tt.value, *p, target)
 	}
 }
-
-// func TestFire(t *testing.T) {
-// 	return
-// 	hook, err := New("test_stream", Config{
-// 		AccessKey: "",
-// 		SecretKey: "",
-// 		Region:    "ap-northeast-1",
-// 	})
-// 	if err != nil {
-// 		t.Errorf(err.Error())
-// 		return
-// 	}
-// 	logrus.AddHook(hook)
-
-// 	logger := logrus.New()
-// 	logger.Hooks.Add(hook)
-
-// 	f := logrus.Fields{
-// 		"message?": "fieldMessage",
-// 		"tag":      "fieldTag",
-// 		"value":    "fieldValue",
-// 	}
-
-// 	logger.WithFields(f).Error("my_message")
-
-// 	return
-// }
