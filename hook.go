@@ -52,9 +52,14 @@ type FirehoseHook struct {
 	addNewline bool
 
 	/*
-		factory method for logrus.Formatter
+		instance of logrus.Formatter
 	*/
-	formatterFactory func() logrus.Formatter
+	formatter logrus.Formatter
+
+	/*
+		mutex to guard formatter
+	*/
+	mu *sync.Mutex
 
 	/*
 		blockingMode specify if the queue is not empty
@@ -70,7 +75,7 @@ type FirehoseHook struct {
 	/*
 		async queue used to
 	*/
-	sendQueue chan *logrus.Entry
+	sendQueue chan *firehose.Record
 
 	/*
 		a logger for error operation
@@ -87,15 +92,15 @@ type FirehoseHook struct {
 // NewFirehoseHook returns initialized logrus hook for Firehose with persistent Firehose logger.
 func NewFirehoseHook(name string, client firehoseiface.FirehoseAPI, opts ...Option) (*FirehoseHook, error) {
 	hk := &FirehoseHook{
-		client:           client,
-		streamName:       name,
-		levels:           DefaultLevels,
-		formatterFactory: func() logrus.Formatter { return &logrus.JSONFormatter{} },
-		sendBatchSize:    firehoseMaxBatchSize,
-		sendQueue:        make(chan *logrus.Entry, firehoseMaxBatchSize),
-		numWorker:        1,
-		blockingMode:     false,
-		addNewline:       false,
+		client:        client,
+		streamName:    name,
+		levels:        DefaultLevels,
+		sendBatchSize: firehoseMaxBatchSize,
+		sendQueue:     make(chan *firehose.Record, firehoseMaxBatchSize),
+		numWorker:     1,
+		blockingMode:  false,
+		addNewline:    false,
+		mu:            &sync.Mutex{},
 	}
 	for _, opt := range opts {
 		opt(hk)
@@ -118,9 +123,9 @@ func WithAddNewLine() Option {
 }
 
 // WithFormatter sets a log entry formatter
-func WithFormatterFactory(f func() logrus.Formatter) Option {
+func WithFormatter(f logrus.Formatter) Option {
 	return func(hook *FirehoseHook) {
-		hook.formatterFactory = f
+		hook.formatter = f
 	}
 }
 
@@ -144,7 +149,7 @@ func WithSendBatchSize(size int) Option {
 	}
 	return func(hook *FirehoseHook) {
 		hook.sendBatchSize = size
-		hook.sendQueue = make(chan *logrus.Entry, size)
+		hook.sendQueue = make(chan *firehose.Record, size)
 	}
 }
 
@@ -181,9 +186,16 @@ func (h *FirehoseHook) Levels() []logrus.Level {
 
 // Fire is invoked by logrus and sends log to Firehose.
 func (h *FirehoseHook) Fire(entry *logrus.Entry) error {
+	h.mu.Lock()
+	fmtEntry, err := h.formatter.Format(entry)
+	h.mu.Unlock()
+	if err != nil {
+		return err
+	}
+
 	for {
 		select {
-		case h.sendQueue <- entry:
+		case h.sendQueue <- &firehose.Record{Data: fmtEntry}:
 			return nil
 		default:
 			if !h.blockingMode {
@@ -204,8 +216,7 @@ func (h *FirehoseHook) SendLoop(tick <-chan time.Time) {
 
 		go func() {
 			defer wg.Done()
-			// do not share formatter cross workers
-			formatter := h.formatterFactory()
+
 			for {
 				buf := make([]*firehose.Record, 0, h.sendBatchSize)
 
@@ -213,7 +224,7 @@ func (h *FirehoseHook) SendLoop(tick <-chan time.Time) {
 				case <-tick:
 					break
 				case entry := <-h.sendQueue:
-					buf = append(buf, &firehose.Record{Data: h.formatEntry(formatter, entry)})
+					buf = append(buf, entry)
 					if len(buf) >= h.sendBatchSize {
 						break
 					}
