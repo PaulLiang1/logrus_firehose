@@ -1,4 +1,4 @@
-module PaulLiang1/logrus_firehose
+module github.com/PaulLiang1/logrus_firehose
 
 go 1.13
 
