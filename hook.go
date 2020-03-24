@@ -116,14 +116,15 @@ func (h *FirehoseHook) getStreamName(entry *logrus.Entry) string {
 	return h.defaultStreamName
 }
 
+var newLine = []byte("\n")
+
 func (h *FirehoseHook) getData(entry *logrus.Entry) []byte {
 	bytes, err := h.formatter.Format(entry)
 	if err != nil {
 		return nil
 	}
 	if h.addNewline {
-		n := []byte("\n")
-		bytes = append(bytes, n...)
+		bytes = append(bytes, newLine...)
 	}
 	return bytes
 }
