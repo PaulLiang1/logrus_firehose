@@ -1,6 +1,7 @@
 package logrus_firehose
 
 import (
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -147,6 +148,15 @@ func WithSendBatchSize(size int) Option {
 	}
 }
 
+func WithNumWoker(num int) Option {
+	if num <= 0 {
+		panic("num can not be <= 0")
+	}
+	return func(hook *FirehoseHook) {
+		hook.numWorker = num
+	}
+}
+
 var newLine = []byte("\n")
 
 /*
@@ -187,8 +197,13 @@ func (h *FirehoseHook) Fire(entry *logrus.Entry) error {
 }
 
 func (h *FirehoseHook) SendLoop(tick <-chan time.Time) {
+	wg := sync.WaitGroup{}
+
 	for i := 0; i < h.numWorker; i++ {
+		wg.Add(1)
+
 		go func() {
+			defer wg.Done()
 			// do not share formatter cross workers
 			formatter := h.formatterFactory()
 			for {
@@ -231,6 +246,8 @@ func (h *FirehoseHook) SendLoop(tick <-chan time.Time) {
 			}
 		}()
 	}
+
+	wg.Wait()
 }
 
 var _ logrus.Hook = (*FirehoseHook)(nil)
