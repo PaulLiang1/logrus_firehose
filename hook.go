@@ -25,8 +25,6 @@ type FirehoseHook struct {
 	defaultPartitionKey string
 	async               bool
 	levels              []logrus.Level
-	ignoreFields        map[string]struct{}
-	filters             map[string]func(interface{}) interface{}
 	addNewline          bool
 	formatter           logrus.Formatter
 }
@@ -43,8 +41,7 @@ func New(name string, conf Config) (*FirehoseHook, error) {
 		client:            svc,
 		defaultStreamName: name,
 		levels:            defaultLevels,
-		ignoreFields:      make(map[string]struct{}),
-		filters:           make(map[string]func(interface{}) interface{}),
+		formatter:         &logrus.JSONFormatter{},
 	}, nil
 }
 
@@ -60,8 +57,7 @@ func NewWithAWSConfig(name string, conf *aws.Config) (*FirehoseHook, error) {
 		client:            svc,
 		defaultStreamName: name,
 		levels:            defaultLevels,
-		ignoreFields:      make(map[string]struct{}),
-		filters:           make(map[string]func(interface{}) interface{}),
+		formatter:         &logrus.JSONFormatter{},
 	}, nil
 }
 
@@ -81,19 +77,13 @@ func (h *FirehoseHook) Async() {
 	h.async = true
 }
 
-// AddIgnore adds field name to ignore.
-func (h *FirehoseHook) AddIgnore(name string) {
-	h.ignoreFields[name] = struct{}{}
-}
-
-// AddFilter adds a custom filter function.
-func (h *FirehoseHook) AddFilter(name string, fn func(interface{}) interface{}) {
-	h.filters[name] = fn
-}
-
 // AddNewline sets if a newline is added to each message.
 func (h *FirehoseHook) AddNewLine(b bool) {
 	h.addNewline = b
+}
+
+func (h *FirehoseHook) WithFormatter(f logrus.Formatter) {
+	h.formatter = f
 }
 
 // Fire is invoked by logrus and sends log to Firehose.
@@ -137,4 +127,3 @@ func (h *FirehoseHook) getData(entry *logrus.Entry) []byte {
 	}
 	return bytes
 }
-
