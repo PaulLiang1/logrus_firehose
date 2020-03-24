@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/firehose"
+	"github.com/aws/aws-sdk-go/service/firehose/firehoseiface"
 	"github.com/sirupsen/logrus"
 )
 
@@ -32,7 +33,7 @@ type FirehoseHook struct {
 	/*
 		firehose client
 	*/
-	client *firehose.Firehose
+	client firehoseiface.FirehoseAPI
 
 	/*
 		firehose stream name to write to
@@ -83,7 +84,7 @@ type FirehoseHook struct {
 }
 
 // NewFirehoseHook returns initialized logrus hook for Firehose with persistent Firehose logger.
-func NewFirehoseHook(name string, client *firehose.Firehose, opts ...Option) (*FirehoseHook, error) {
+func NewFirehoseHook(name string, client firehoseiface.FirehoseAPI, opts ...Option) (*FirehoseHook, error) {
 	hk := &FirehoseHook{
 		client:           client,
 		streamName:       name,
